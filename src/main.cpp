@@ -4,6 +4,22 @@
 #include <ESPAsyncTCP.h>
 #include "LittleFS.h"
 
+#include <AccelStepper.h>
+
+const int stepsPerRevolution = 2048;  // change this to fit the number of steps per revolution
+int MaxSpeed = 500;
+int Acceleration = 100;
+long int position = 0;
+int move_by;
+
+// ULN2003 Motor Driver Pins
+#define IN1 5
+#define IN2 4
+#define IN3 14
+#define IN4 12
+
+AccelStepper stepper(AccelStepper::HALF4WIRE, IN1, IN3, IN2, IN4);
+
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
@@ -140,6 +156,9 @@ void setup() {
 
   initFS();
 
+  stepper.setMaxSpeed(MaxSpeed);
+  stepper.setAcceleration(Acceleration);
+
   // Set GPIO 2 as an OUTPUT
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
@@ -172,6 +191,38 @@ void setup() {
     server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request) {
       digitalWrite(ledPin, HIGH);
       request->send(LittleFS, "/index.html", "text/html", false, processor);
+    });
+
+    server.on("/stepper", HTTP_POST, [](AsyncWebServerRequest *request) {
+      int params = request->params();
+      for(int i=0;i<params;i++){
+        AsyncWebParameter* p = request->getParam(i);
+        if(p->isPost()){
+          // HTTP POST position value
+          if (p->name() == "position") {
+            position = p->value().toInt();
+            stepper.moveTo(position);
+            Serial.print("Position set to: ");
+            Serial.println(position);
+          }
+          if (p->name() == "move_by") {
+            move_by = p->value().toInt();
+            stepper.moveTo(position + move_by);
+            Serial.print("Position set to: ");
+            Serial.println(position + move_by);
+          }
+          if (p->name() == "maxspeed") {
+            MaxSpeed = p->value().toInt();
+            Serial.print("Maxspeed set to: ");
+            Serial.println(MaxSpeed);
+          }
+          if (p->name() == "acceleration") {
+            Acceleration = p->value().toInt();
+            Serial.print("Acceleration set to: ");
+            Serial.println(Acceleration);
+          }
+        }
+      }
     });
     server.begin();
   }
@@ -244,4 +295,5 @@ void loop() {
     delay(5000);
     ESP.restart();
   }
+  stepper.run();
 }
